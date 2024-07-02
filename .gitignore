@@ -9,3 +9,4 @@ sandbox/
 data/
 *.csv
 *.csv#
+client_secret.json
