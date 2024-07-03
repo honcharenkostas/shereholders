@@ -16,6 +16,7 @@ import pytesseract
 from PIL import Image
 import fitz  # PyMuPDF
 import google.generativeai as genai
+import csv
 
 
 load_dotenv()
@@ -29,39 +30,61 @@ class Bot:
     driver = None
     google_service = None
     ai_client = None
+    csv = None
 
     def __init__(self):
-        self.google_service = self.google_authenticate()
+        # self.google_service = self.google_authenticate()
+        #
+        # genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+        # self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
+        #
+        # options = webdriver.ChromeOptions()
+        # options.add_argument('--start-maximized')
+        # options.add_argument('--no-sandbox')
+        # # options.add_argument('--headless')
+        # options.add_argument("--window-size=1440,900")
+        # options.add_argument("--lang=en")
+        #
+        # os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
+        # options.add_experimental_option("prefs", {
+        #     "download.default_directory": self.DOWNLOAD_DIR,
+        #     "download.prompt_for_download": False,
+        #     "download.directory_upgrade": True,
+        #     "safebrowsing.enabled": True
+        # })
+        #
+        # service = Service(executable_path="./chromedriver")
+        # self.driver = webdriver.Chrome(
+        #     service=service,
+        #     options=options
+        # )
+        # self.driver.maximize_window()
+        #
+        # for file in self.get_downloded_files():
+        #     os.remove(f"{self.DOWNLOAD_DIR}/{file}")
 
-        genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-        self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
-
-        options = webdriver.ChromeOptions()
-        options.add_argument('--start-maximized')
-        options.add_argument('--no-sandbox')
-        # options.add_argument('--headless')
-        options.add_argument("--window-size=1440,900")
-        options.add_argument("--lang=en")
-
-        os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
-        options.add_experimental_option("prefs", {
-            "download.default_directory": self.DOWNLOAD_DIR,
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        })
-
-        service = Service(executable_path="./chromedriver")
-        self.driver = webdriver.Chrome(
-            service=service,
-            options=options
-        )
-        self.driver.maximize_window()
-
-        for file in self.get_downloded_files():
-            os.remove(f"{self.DOWNLOAD_DIR}/{file}")
+        self.csv = self.csv_to_list_of_dicts("main.csv")
 
     def run(self):
+        shareholders = [
+            {'name': 'Hansjörg Schoch', 'percentage': 50, 'date_of_birth': '11.05.1955', 'age': 68},
+            {'name': 'Finn-Laurin Schachtmeier', 'percentage': 2, 'date_of_birth': '27.06.2004', 'age': 19},
+            {'name': 'Wimmenden', 'percentage': 48, 'date_of_birth': None, 'age': None},
+        ]
+
+        line_number = 2
+        new_row = self.csv[line_number].copy()
+        i = 1
+        for row in shareholders:
+            new_row[f"Shareholder-{i}"] = row["name"]
+            new_row[f"Shareholder-{i} %"] = row["percentage"]
+            new_row[f"Shareholder-{i} DB"] = row["date_of_birth"]
+            new_row[f"Shareholder-{i} age"] = row["age"]
+            i += 1
+
+        self.update_csv_by_index("main.csv", line_number, new_row)
+
+        return
         company_name = "Minessa Medical Deutschland GmbH"  # "inoage GmbH"
         register_number = "774122"  # "29795"
         court = "Winnenden"  # "Dresden"
@@ -262,6 +285,37 @@ class Bot:
     @staticmethod
     def save_image(image, file_path):
         image.save(file_path, 'JPEG', quality=100)  # Save with maximum quality
+
+    @staticmethod
+    def csv_to_list_of_dicts(file_path):
+        with open(file_path, mode='r', newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            list_of_dicts = [row for row in reader]
+        return list_of_dicts
+
+    def update_csv_by_index(self, file_path, line_index, update_dict):
+        print("update_dict", update_dict)
+        # Read the CSV file into a list of dictionaries
+        with open(file_path, mode='r', newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            rows = list(reader)
+
+        # Check if the line_index is valid
+        if line_index < 0 or line_index >= len(rows):
+            raise IndexError("line_index out of range")
+
+        # Update the specified row with the new values from update_dict
+        fieldnames = update_dict.keys()
+        for key, value in update_dict.items():
+            rows[line_index][key] = value
+
+        print(rows)
+
+        # Write the updated rows back to the CSV file
+        with open(file_path, mode='w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
 
 
 bot = Bot()
