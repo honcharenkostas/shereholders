@@ -1,6 +1,8 @@
 import os
-import time
 import os.path
+import time
+import json
+from datetime import datetime
 import pickle
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -10,6 +12,10 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
+import pytesseract
+from PIL import Image
+import fitz  # PyMuPDF
+import google.generativeai as genai
 
 
 load_dotenv()
@@ -22,13 +28,20 @@ class Bot:
     GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
     driver = None
     google_service = None
+    ai_client = None
 
     def __init__(self):
         self.google_service = self.google_authenticate()
 
+        genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+        self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
+
         options = webdriver.ChromeOptions()
         options.add_argument('--start-maximized')
         options.add_argument('--no-sandbox')
+        options.add_argument('--headless')
+        options.add_argument("--window-size=1440,900")
+        options.add_argument("--lang=en")
 
         os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
         options.add_experimental_option("prefs", {
@@ -46,11 +59,12 @@ class Bot:
         self.driver.maximize_window()
 
     def run(self):
-        company_name = "inoage GmbH"
-        register_number = "29795"
-        court = "Dresden"
+        company_name = "Minessa Medical Deutschland GmbH"  # "inoage GmbH"
+        register_number = "774122"  # "29795"
+        court = "Winnenden"  # "Dresden"
         self.driver.get("https://www.handelsregister.de/rp_web/normalesuche.xhtml")
         time.sleep(3)
+        self.driver.save_screenshot("1.png")
 
         self.driver.execute_script(f"document.getElementById('form:schlagwoerter').innerText = '{company_name}'")
         self.driver.execute_script(f"document.getElementById('form:registerNummer').value = '{register_number}'")
@@ -73,23 +87,45 @@ class Bot:
         self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(1)
 
-        self.driver.execute_script('''
-        elements = document.querySelectorAll('li span');
-        targetElement = Array.from(elements).find(element => element.innerText === "Documents on register number");
-        targetElement.closest('li').querySelector('.ui-tree-toggler').click()
-        ''')
-        time.sleep(1)
-        self.driver.execute_script('''
-        elements = document.querySelectorAll('li span');
-        targetElement = Array.from(elements).find(element => element.innerText === "List of shareholders");
-        targetElement.closest('li').querySelector('.ui-tree-toggler').click()
-        ''')
+        self.driver.save_screenshot("2.png")
+
+        for phrase in ["Dokumente zur Registernummer", "Documents on register number"]:
+            try:
+                self.driver.execute_script(f'''
+                elements = document.querySelectorAll('li span');
+                targetElement = Array.from(elements).find(element => element.innerText === "{phrase}");
+                targetElement.closest('li').querySelector('.ui-tree-toggler').click()
+                ''')
+                break
+            except:
+                pass
         time.sleep(1)
 
-        for el in self.driver.find_elements(By.CSS_SELECTOR, 'li span'):
-            if el.text.strip().startswith("List of shareholders – "):
-                el.click()
+        for phrase in ["Liste der Gesellschafter", "List of shareholders"]:
+            try:
+                self.driver.execute_script(f'''
+                elements = document.querySelectorAll('li span');
+                targetElement = Array.from(elements).find(element => element.innerText === "{phrase}");
+                targetElement.closest('li').querySelector('.ui-tree-toggler').click()
+                ''')
                 break
+            except:
+                pass
+        time.sleep(1)
+
+        element_found = False
+        for el in self.driver.find_elements(By.CSS_SELECTOR, 'li span'):
+            for phrase in ["Liste der Gesellschafter -", "List of shareholders –"]:
+                try:
+                    if el.text.strip().startswith(phrase):
+                        element_found = True
+                        el.click()
+                        break
+                except:
+                    pass
+            if element_found:
+                break
+
         time.sleep(1)
         self.driver.execute_script("document.querySelectorAll(\"input[name='dk_form:radio_dkbuttons']\")[1].click()")
         time.sleep(1)
@@ -97,9 +133,17 @@ class Bot:
         time.sleep(10)
 
         for file in self.get_downloded_files():
-            self.upload_file_to_google_drive(file)
+            google_drive_file_url = self.upload_file_to_google_drive(file)
+            print("google_drive_file_url", google_drive_file_url)
+
+            file_text = self.extract_text(f"{self.DOWNLOAD_DIR}/{file}")
+            shareholders = self.extract_shareholders_from_text(file_text)
+            for row in shareholders:
+                print(row)
+
             os.remove(f"{self.DOWNLOAD_DIR}/{file}")
 
+        self.driver.save_screenshot("3.png")
         self.driver.close()
 
     def get_downloded_files(self):
@@ -136,8 +180,60 @@ class Bot:
             fields='id'
         ).execute()
 
-        # https://drive.google.com/file/d/15sh561qMKauH1rx6v1iPN1sR2MC16rVO
-        print(f'File ID: {file.get("id")}')
+        return f"https://drive.google.com/file/d/{file.get('id')}"
+
+    @staticmethod
+    def extract_text_from_tiff(file_path):
+        img = Image.open(file_path)
+        text = pytesseract.image_to_string(img)
+        return text
+
+    @staticmethod
+    def extract_text_from_pdf(file_path):
+        pdf_document = fitz.open(file_path)
+        text = ""
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            if page.rotation == 90:  # If the page is rotated 90 degrees
+                page.set_rotation(0)  # Rotate back to 0 degrees
+            text += page.get_text()
+        return text
+
+    def extract_text(self, file_path):
+        if file_path.lower().endswith('.tiff') or file_path.lower().endswith('.tif'):
+            return self.extract_text_from_tiff(file_path)
+        elif file_path.lower().endswith('.pdf'):
+            return self.extract_text_from_pdf(file_path)
+        else:
+            raise ValueError("Unsupported file type. Please provide a TIFF or PDF file.")
+
+    def extract_shareholders_from_text(self, text):
+        result = []
+        if text:
+            prompt = f'''
+                Here is a content of the file:
+                {text}
+                ######## 
+                Today is {datetime.now().strftime("%d %B %Y")}.
+                Please note that dates in the document usually in format (day month year).
+                Round percentage to 2 numbers after dot.
+                Please analyse a text I provide above 
+                and return a json of shareholders as list of objects with next fields per object:
+                1. name - (str) shareholder name;
+                2. percentage - (int) percentage of shareholdings;
+                3. date_of_birth - (str) date of birth of shareholder in format 'day.month.year';
+                4. age - (int) age of shareholder in years;
+        
+                No need to explain, no need to wrap in "```json". Return plain json only.
+                '''.strip()
+
+            response = self.ai_client.generate_content(prompt)
+            try:
+                result = json.loads(response.text)
+            except Exception as e:
+                result = []
+                print(e)
+        return result
 
 
 bot = Bot()
