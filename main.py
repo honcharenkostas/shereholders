@@ -135,13 +135,11 @@ class Bot:
         for file in self.get_downloded_files():
             google_drive_file_url = self.upload_file_to_google_drive(file)
             print("google_drive_file_url", google_drive_file_url)
-
-            file_text = self.extract_text(f"{self.DOWNLOAD_DIR}/{file}")
-            shareholders = self.extract_shareholders_from_text(file_text)
-            for row in shareholders:
-                print(row)
-
-            os.remove(f"{self.DOWNLOAD_DIR}/{file}")
+            shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
+            # for row in shareholders:
+            #     print(row)
+            #
+            # os.remove(f"{self.DOWNLOAD_DIR}/{file}")
 
         self.driver.save_screenshot("3.png")
         self.driver.close()
@@ -182,58 +180,79 @@ class Bot:
 
         return f"https://drive.google.com/file/d/{file.get('id')}"
 
-    @staticmethod
-    def extract_text_from_tiff(file_path):
-        img = Image.open(file_path)
-        text = pytesseract.image_to_string(img)
-        return text
+    def extract_shareholders_from_file(self, file_path):
+        # tiff/pdf to jpg
+        images = self.pdf_to_images(file_path)
+        merged_image = self.merge_images(images)
+        output_path = ""
+        if file_path.endswith(".tiff"):
+            output_path = f"{file_path[:-5]}.jpg"
+        elif file_path.endswith(".pdf"):
+            output_path = f"{file_path[:-4]}.jpg"
+        self.save_image(merged_image, output_path)
+
+        # result = []
+        # if text:
+        #     prompt = f'''
+        #         Here is a content of the file:
+        #         {text}
+        #         ########
+        #         Today is {datetime.now().strftime("%d %B %Y")}.
+        #         Please note that dates in the document usually in format (day month year).
+        #         Round percentage to 2 numbers after dot.
+        #         Please analyse a text I provide above
+        #         and return a json of shareholders as list of objects with next fields per object:
+        #         1. name - (str) shareholder name;
+        #         2. percentage - (int) percentage of shareholdings;
+        #         3. date_of_birth - (str) date of birth of shareholder in format 'day.month.year';
+        #         4. age - (int) age of shareholder in years;
+        #
+        #         No need to explain, no need to wrap in "```json". Return plain json only.
+        #         '''.strip()
+        #
+        #     response = self.ai_client.generate_content(prompt)
+        #     try:
+        #         result = json.loads(response.text)
+        #     except Exception as e:
+        #         result = []
+        #         print(e)
+        # return result
 
     @staticmethod
-    def extract_text_from_pdf(file_path):
+    def pdf_to_images(file_path):
         pdf_document = fitz.open(file_path)
-        text = ""
+        images = []
+
         for page_num in range(len(pdf_document)):
             page = pdf_document.load_page(page_num)
-            if page.rotation == 90:  # If the page is rotated 90 degrees
-                page.set_rotation(0)  # Rotate back to 0 degrees
-            text += page.get_text()
-        return text
+            # Use a higher resolution for better quality
+            zoom = 2.0  # You can adjust this value to get the desired resolution
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            images.append(img)
 
-    def extract_text(self, file_path):
-        if file_path.lower().endswith('.tiff') or file_path.lower().endswith('.tif'):
-            return self.extract_text_from_tiff(file_path)
-        elif file_path.lower().endswith('.pdf'):
-            return self.extract_text_from_pdf(file_path)
-        else:
-            raise ValueError("Unsupported file type. Please provide a TIFF or PDF file.")
+        return images
 
-    def extract_shareholders_from_text(self, text):
-        result = []
-        if text:
-            prompt = f'''
-                Here is a content of the file:
-                {text}
-                ######## 
-                Today is {datetime.now().strftime("%d %B %Y")}.
-                Please note that dates in the document usually in format (day month year).
-                Round percentage to 2 numbers after dot.
-                Please analyse a text I provide above 
-                and return a json of shareholders as list of objects with next fields per object:
-                1. name - (str) shareholder name;
-                2. percentage - (int) percentage of shareholdings;
-                3. date_of_birth - (str) date of birth of shareholder in format 'day.month.year';
-                4. age - (int) age of shareholder in years;
-        
-                No need to explain, no need to wrap in "```json". Return plain json only.
-                '''.strip()
+    @staticmethod
+    def merge_images(images):
+        widths, heights = zip(*(img.size for img in images))
 
-            response = self.ai_client.generate_content(prompt)
-            try:
-                result = json.loads(response.text)
-            except Exception as e:
-                result = []
-                print(e)
-        return result
+        total_height = sum(heights)
+        max_width = max(widths)
+
+        merged_image = Image.new('RGB', (max_width, total_height))
+
+        y_offset = 0
+        for img in images:
+            merged_image.paste(img, (0, y_offset))
+            y_offset += img.height
+
+        return merged_image
+
+    @staticmethod
+    def save_image(image, file_path):
+        image.save(file_path, 'JPEG', quality=100)  # Save with maximum quality
 
 
 bot = Bot()
