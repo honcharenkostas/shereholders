@@ -17,6 +17,7 @@ from PIL import Image
 import fitz  # PyMuPDF
 import google.generativeai as genai
 import csv
+import pandas as pd
 
 
 load_dotenv()
@@ -63,7 +64,7 @@ class Bot:
         for file in self.get_downloded_files():
             os.remove(f"{self.DOWNLOAD_DIR}/{file}")
 
-        self.csv = self.csv_to_list_of_dicts("main.csv")
+        self.csv = self.xls_to_list_of_dicts("main.xls")
 
     def run(self):
         row_number = -1
@@ -142,7 +143,10 @@ class Bot:
                 time.sleep(1)
                 self.driver.execute_script("document.querySelector(\"button[type=submit]\").click()")
                 time.sleep(10)
+            except Exception as e:
+                print(f"{e}")
 
+            try:
                 for file in self.get_downloded_files():
                     if not file.endswith(".tiff") and not file.endswith(".pdf"):
                         continue
@@ -151,7 +155,6 @@ class Bot:
                     shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
 
                     # rewrite csv
-                    print("len csv", len(self.csv))
                     new_row = self.csv[row_number].copy()
                     new_row["Document Link"] = google_drive_file_url
                     i = 1
@@ -161,13 +164,13 @@ class Bot:
                         new_row[f"Shareholder-{i} DB"] = s["date_of_birth"]
                         new_row[f"Shareholder-{i} age"] = s["age"]
                         i += 1
-                    self.update_csv_by_index("main.csv", row_number, new_row)
+                    self.update_xls_by_index("main.xls", row_number, new_row)
 
                     os.remove(f"{self.DOWNLOAD_DIR}/{file}")
-
-                self.driver.save_screenshot("3.png")
             except Exception as e:
                 print(f"{e}")
+
+            self.driver.save_screenshot("3.png")
 
         self.driver.close()
 
@@ -286,27 +289,17 @@ class Bot:
         image.save(file_path, 'JPEG', quality=100)  # Save with maximum quality
 
     @staticmethod
-    def csv_to_list_of_dicts(file_path):
-        with open(file_path, mode='r', newline='') as csvfile:
-            reader = csv.DictReader(csvfile)
-            list_of_dicts = [row for row in reader]
-        return list_of_dicts
+    def xls_to_list_of_dicts(file_path):
+        df = pd.read_excel(file_path)
+        return df.to_dict(orient='records')
 
-    def update_csv_by_index(self, file_path, line_index, update_dict):
-        with open(file_path, mode='r', newline='') as csvfile:
-            reader = csv.DictReader(csvfile)
-            rows = list(reader)
-            headers = list(rows[0].keys()) if rows else []
-
+    def update_xls_by_index(self, file_path, line_index, update_dict):
+        df = pd.read_excel(file_path)
         for key, value in update_dict.items():
-            rows[line_index][key] = value
-            if key not in headers:
-                headers.append(key)
-
-        with open(file_path, mode='w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=headers)
-            writer.writeheader()
-            writer.writerows(rows)
+            if key not in df.columns:
+                df[key] = pd.NA
+            df.at[line_index, key] = value
+        df.to_excel(file_path, index=False, engine="openpyxl")
 
 
 bot = Bot()
