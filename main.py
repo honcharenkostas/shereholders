@@ -33,143 +33,142 @@ class Bot:
     csv = None
 
     def __init__(self):
-        # self.google_service = self.google_authenticate()
-        #
-        # genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-        # self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
-        #
-        # options = webdriver.ChromeOptions()
-        # options.add_argument('--start-maximized')
-        # options.add_argument('--no-sandbox')
-        # # options.add_argument('--headless')
-        # options.add_argument("--window-size=1440,900")
-        # options.add_argument("--lang=en")
-        #
-        # os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
-        # options.add_experimental_option("prefs", {
-        #     "download.default_directory": self.DOWNLOAD_DIR,
-        #     "download.prompt_for_download": False,
-        #     "download.directory_upgrade": True,
-        #     "safebrowsing.enabled": True
-        # })
-        #
-        # service = Service(executable_path="./chromedriver")
-        # self.driver = webdriver.Chrome(
-        #     service=service,
-        #     options=options
-        # )
-        # self.driver.maximize_window()
-        #
-        # for file in self.get_downloded_files():
-        #     os.remove(f"{self.DOWNLOAD_DIR}/{file}")
+        self.google_service = self.google_authenticate()
+
+        genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+        self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
+
+        options = webdriver.ChromeOptions()
+        options.add_argument('--start-maximized')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--headless')
+        options.add_argument("--window-size=1440,900")
+        options.add_argument("--lang=en")
+
+        os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
+        options.add_experimental_option("prefs", {
+            "download.default_directory": self.DOWNLOAD_DIR,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": True
+        })
+
+        service = Service(executable_path="./chromedriver")
+        self.driver = webdriver.Chrome(
+            service=service,
+            options=options
+        )
+        self.driver.maximize_window()
+
+        for file in self.get_downloded_files():
+            os.remove(f"{self.DOWNLOAD_DIR}/{file}")
 
         self.csv = self.csv_to_list_of_dicts("main.csv")
 
     def run(self):
-        shareholders = [
-            {'name': 'Hansjörg Schoch', 'percentage': 50, 'date_of_birth': '11.05.1955', 'age': 68},
-            {'name': 'Finn-Laurin Schachtmeier', 'percentage': 2, 'date_of_birth': '27.06.2004', 'age': 19},
-            {'name': 'Wimmenden', 'percentage': 48, 'date_of_birth': None, 'age': None},
-        ]
-
-        line_number = 2
-        new_row = self.csv[line_number].copy()
-        i = 1
-        for row in shareholders:
-            new_row[f"Shareholder-{i}"] = row["name"]
-            new_row[f"Shareholder-{i} %"] = row["percentage"]
-            new_row[f"Shareholder-{i} DB"] = row["date_of_birth"]
-            new_row[f"Shareholder-{i} age"] = row["age"]
-            i += 1
-
-        self.update_csv_by_index("main.csv", line_number, new_row)
-
-        return
-        company_name = "Minessa Medical Deutschland GmbH"  # "inoage GmbH"
-        register_number = "774122"  # "29795"
-        court = "Winnenden"  # "Dresden"
-        self.driver.get("https://www.handelsregister.de/rp_web/normalesuche.xhtml")
-        time.sleep(3)
-        self.driver.save_screenshot("1.png")
-
-        self.driver.execute_script(f"document.getElementById('form:schlagwoerter').innerText = '{company_name}'")
-        self.driver.execute_script(f"document.getElementById('form:registerNummer').value = '{register_number}'")
-        # self.driver.execute_script(f"document.getElementById('form:registergericht_input').value = '{court}'")
-
-        # self.driver.find_element(By.ID, "form").submit()
-
-        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
-        btn = self.driver.find_element(By.ID, "form:btnSuche")
-        btn.click()
-        time.sleep(5)
-        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
-        for a in self.driver.find_elements(By.CSS_SELECTOR, "a.dokumentList"):
-            if a.find_element(By.CSS_SELECTOR, "span").text.strip() == "DK":
-                a.click()
-                break
-        time.sleep(5)
-        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(1)
-
-        self.driver.save_screenshot("2.png")
-
-        for phrase in ["Dokumente zur Registernummer", "Documents on register number"]:
+        row_number = -1
+        for row in self.csv:
+            row_number += 1
+            print("row_number", row_number)
             try:
-                self.driver.execute_script(f'''
-                elements = document.querySelectorAll('li span');
-                targetElement = Array.from(elements).find(element => element.innerText === "{phrase}");
-                targetElement.closest('li').querySelector('.ui-tree-toggler').click()
-                ''')
-                break
-            except:
-                pass
-        time.sleep(1)
+                company_name = row.get("Name")
+                register_number = row.get("HRB")
+                if not company_name or not register_number:
+                    continue
 
-        for phrase in ["Liste der Gesellschafter", "List of shareholders"]:
-            try:
-                self.driver.execute_script(f'''
-                elements = document.querySelectorAll('li span');
-                targetElement = Array.from(elements).find(element => element.innerText === "{phrase}");
-                targetElement.closest('li').querySelector('.ui-tree-toggler').click()
-                ''')
-                break
-            except:
-                pass
-        time.sleep(1)
+                self.driver.get("https://www.handelsregister.de/rp_web/normalesuche.xhtml")
+                time.sleep(3)
+                self.driver.save_screenshot("1.png")
 
-        element_found = False
-        for el in self.driver.find_elements(By.CSS_SELECTOR, 'li span'):
-            for phrase in ["Liste der Gesellschafter -", "List of shareholders –"]:
-                try:
-                    if el.text.strip().startswith(phrase):
-                        element_found = True
-                        el.click()
+                self.driver.execute_script(f"document.getElementById('form:schlagwoerter').innerText = '{company_name}'")
+                self.driver.execute_script(f"document.getElementById('form:registerNummer').value = '{register_number}'")
+
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(2)
+                btn = self.driver.find_element(By.ID, "form:btnSuche")
+                btn.click()
+                time.sleep(5)
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(2)
+                for a in self.driver.find_elements(By.CSS_SELECTOR, "a.dokumentList"):
+                    if a.find_element(By.CSS_SELECTOR, "span").text.strip() == "DK":
+                        a.click()
                         break
-                except:
-                    pass
-            if element_found:
-                break
+                time.sleep(5)
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1)
 
-        time.sleep(1)
-        self.driver.execute_script("document.querySelectorAll(\"input[name='dk_form:radio_dkbuttons']\")[1].click()")
-        time.sleep(1)
-        self.driver.execute_script("document.querySelector(\"button[type=submit]\").click()")
-        time.sleep(10)
+                self.driver.save_screenshot("2.png")
 
-        for file in self.get_downloded_files():
-            if not file.endswith(".tiff") and not file.endswith(".pdf"):
-                continue
-            google_drive_file_url = self.upload_file_to_google_drive(file)
-            print("google_drive_file_url", google_drive_file_url)
-            shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
-            for row in shareholders:
-                print(row)
+                for phrase in ["Dokumente zur Registernummer", "Documents on register number"]:
+                    try:
+                        self.driver.execute_script(f'''
+                        elements = document.querySelectorAll('li span');
+                        targetElement = Array.from(elements).find(element => element.innerText === "{phrase}");
+                        targetElement.closest('li').querySelector('.ui-tree-toggler').click()
+                        ''')
+                        break
+                    except:
+                        pass
+                time.sleep(1)
 
-            os.remove(f"{self.DOWNLOAD_DIR}/{file}")
+                for phrase in ["Liste der Gesellschafter", "List of shareholders"]:
+                    try:
+                        self.driver.execute_script(f'''
+                        elements = document.querySelectorAll('li span');
+                        targetElement = Array.from(elements).find(element => element.innerText === "{phrase}");
+                        targetElement.closest('li').querySelector('.ui-tree-toggler').click()
+                        ''')
+                        break
+                    except:
+                        pass
+                time.sleep(1)
 
-        self.driver.save_screenshot("3.png")
+                element_found = False
+                for el in self.driver.find_elements(By.CSS_SELECTOR, 'li span'):
+                    for phrase in ["Liste der Gesellschafter -", "List of shareholders –"]:
+                        try:
+                            if el.text.strip().startswith(phrase):
+                                element_found = True
+                                el.click()
+                                break
+                        except:
+                            pass
+                    if element_found:
+                        break
+
+                time.sleep(1)
+                self.driver.execute_script("document.querySelectorAll(\"input[name='dk_form:radio_dkbuttons']\")[1].click()")
+                time.sleep(1)
+                self.driver.execute_script("document.querySelector(\"button[type=submit]\").click()")
+                time.sleep(10)
+
+                for file in self.get_downloded_files():
+                    if not file.endswith(".tiff") and not file.endswith(".pdf"):
+                        continue
+                    google_drive_file_url = self.upload_file_to_google_drive(file)
+                    print("google_drive_file_url", google_drive_file_url)
+                    shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
+
+                    # rewrite csv
+                    print("len csv", len(self.csv))
+                    new_row = self.csv[row_number].copy()
+                    new_row["Document Link"] = google_drive_file_url
+                    i = 1
+                    for s in shareholders:
+                        new_row[f"Shareholder-{i}"] = s["name"]
+                        new_row[f"Shareholder-{i} %"] = s["percentage"]
+                        new_row[f"Shareholder-{i} DB"] = s["date_of_birth"]
+                        new_row[f"Shareholder-{i} age"] = s["age"]
+                        i += 1
+                    self.update_csv_by_index("main.csv", row_number, new_row)
+
+                    os.remove(f"{self.DOWNLOAD_DIR}/{file}")
+
+                self.driver.save_screenshot("3.png")
+            except Exception as e:
+                print(f"{e}")
+
         self.driver.close()
 
     def get_downloded_files(self):
@@ -228,7 +227,7 @@ class Bot:
             prompt_text = '''
             Please analyse the image
             and return a json of shareholders as list of objects with next fields per object:
-            1. name - (str) shareholder name;
+            1. name - (str) shareholder name (extract only name and ignore any additional details);
             2. percentage - (int) percentage of shareholdings;
             3. date_of_birth - (str) date of birth of shareholder in format 'day.month.year';
             4. age - (int) age of shareholder in years;
@@ -294,26 +293,18 @@ class Bot:
         return list_of_dicts
 
     def update_csv_by_index(self, file_path, line_index, update_dict):
-        print("update_dict", update_dict)
-        # Read the CSV file into a list of dictionaries
         with open(file_path, mode='r', newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             rows = list(reader)
+            headers = list(rows[0].keys()) if rows else []
 
-        # Check if the line_index is valid
-        if line_index < 0 or line_index >= len(rows):
-            raise IndexError("line_index out of range")
-
-        # Update the specified row with the new values from update_dict
-        fieldnames = update_dict.keys()
         for key, value in update_dict.items():
             rows[line_index][key] = value
+            if key not in headers:
+                headers.append(key)
 
-        print(rows)
-
-        # Write the updated rows back to the CSV file
         with open(file_path, mode='w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
             writer.writeheader()
             writer.writerows(rows)
 
