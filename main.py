@@ -2,16 +2,16 @@ import os
 import os.path
 import time
 import json
-import pickle
+# import pickle
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
+# from google_auth_oauthlib.flow import InstalledAppFlow
+# from google.auth.transport.requests import Request
+# from googleapiclient.discovery import build
 # from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
-import pytesseract
+# import pytesseract
 from PIL import Image
 import fitz  # PyMuPDF
 import google.generativeai as genai
@@ -33,7 +33,7 @@ class Bot:
     csv = None
 
     def __init__(self):
-        self.google_service = self.google_authenticate()
+        # self.google_service = self.google_authenticate()
 
         genai.configure(api_key=os.environ['GEMINI_API_KEY'])
         self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
@@ -178,22 +178,22 @@ class Bot:
         all_entries = os.listdir(self.DOWNLOAD_DIR)
         return [entry for entry in all_entries if os.path.isfile(os.path.join(self.DOWNLOAD_DIR, entry))]
 
-    def google_authenticate(self):
-        creds = None
-        if os.path.exists('token.pickle'):
-            with open('token.pickle', 'rb') as token:
-                creds = pickle.load(token)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(self.GOOGLE_API_CLIENT_SECRET_FILE, self.GOOGLE_API_SCOPES)
-                creds = flow.run_local_server(port=0)
-            with open('token.pickle', 'wb') as token:
-                pickle.dump(creds, token)
-
-        service = build('drive', 'v3', credentials=creds)
-        return service
+    # def google_authenticate(self):
+    #     creds = None
+    #     if os.path.exists('token.pickle'):
+    #         with open('token.pickle', 'rb') as token:
+    #             creds = pickle.load(token)
+    #     if not creds or not creds.valid:
+    #         if creds and creds.expired and creds.refresh_token:
+    #             creds.refresh(Request())
+    #         else:
+    #             flow = InstalledAppFlow.from_client_secrets_file(self.GOOGLE_API_CLIENT_SECRET_FILE, self.GOOGLE_API_SCOPES)
+    #             creds = flow.run_local_server(port=0)
+    #         with open('token.pickle', 'wb') as token:
+    #             pickle.dump(creds, token)
+    #
+    #     service = build('drive', 'v3', credentials=creds)
+    #     return service
 
     # def upload_file_to_google_drive(self, file_path):
     #     file_path = f"{self.DOWNLOAD_DIR}/{file_path}"
