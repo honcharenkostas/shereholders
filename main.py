@@ -156,7 +156,7 @@ class Bot:
                     # rewrite csv
                     new_row = self.csv[row_number].copy()
                     # new_row["Document Link"] = google_drive_file_url
-                    new_row["Document Link"] = f"{self.DOWNLOAD_DIR}/{file}"
+                    new_row["Document Link"] = f"file:/{self.DOWNLOAD_DIR}/{file}"
                     i = 1
                     for s in shareholders:
                         new_row[f"Shareholder-{i}"] = s["name"]
