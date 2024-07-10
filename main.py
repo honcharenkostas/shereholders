@@ -2,7 +2,6 @@ import os
 import os.path
 import time
 import json
-from datetime import datetime
 import pickle
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -10,13 +9,13 @@ from selenium.webdriver.chrome.service import Service
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+# from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
 import pytesseract
 from PIL import Image
 import fitz  # PyMuPDF
 import google.generativeai as genai
-import csv
+# import csv
 import pandas as pd
 
 
@@ -61,8 +60,8 @@ class Bot:
         )
         self.driver.maximize_window()
 
-        for file in self.get_downloded_files():
-            os.remove(f"{self.DOWNLOAD_DIR}/{file}")
+        # for file in self.get_downloded_files():
+        #     os.remove(f"{self.DOWNLOAD_DIR}/{file}")
 
         self.csv = self.xls_to_list_of_dicts("main.xls")
 
@@ -150,13 +149,14 @@ class Bot:
                 for file in self.get_downloded_files():
                     if not file.endswith(".tiff") and not file.endswith(".pdf"):
                         continue
-                    google_drive_file_url = self.upload_file_to_google_drive(file)
-                    print("google_drive_file_url", google_drive_file_url)
+                    # google_drive_file_url = self.upload_file_to_google_drive(file)
+                    # print("google_drive_file_url", google_drive_file_url)
                     shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
 
                     # rewrite csv
                     new_row = self.csv[row_number].copy()
-                    new_row["Document Link"] = google_drive_file_url
+                    # new_row["Document Link"] = google_drive_file_url
+                    new_row["Document Link"] = f"{self.DOWNLOAD_DIR}/{file}"
                     i = 1
                     for s in shareholders:
                         new_row[f"Shareholder-{i}"] = s["name"]
@@ -166,7 +166,7 @@ class Bot:
                         i += 1
                     self.update_xls_by_index("main.xls", row_number, new_row)
 
-                    os.remove(f"{self.DOWNLOAD_DIR}/{file}")
+                    # os.remove(f"{self.DOWNLOAD_DIR}/{file}")
             except Exception as e:
                 print(f"{e}")
 
@@ -195,20 +195,20 @@ class Bot:
         service = build('drive', 'v3', credentials=creds)
         return service
 
-    def upload_file_to_google_drive(self, file_path):
-        file_path = f"{self.DOWNLOAD_DIR}/{file_path}"
-        file_metadata = {
-            'name': os.path.basename(file_path),
-            'parents': [self.GOOGLE_DRIVE_FOLDER_ID] if self.GOOGLE_DRIVE_FOLDER_ID else []
-        }
-        media = MediaFileUpload(file_path, resumable=True)
-        file = self.google_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
-
-        return f"https://drive.google.com/file/d/{file.get('id')}"
+    # def upload_file_to_google_drive(self, file_path):
+    #     file_path = f"{self.DOWNLOAD_DIR}/{file_path}"
+    #     file_metadata = {
+    #         'name': os.path.basename(file_path),
+    #         'parents': [self.GOOGLE_DRIVE_FOLDER_ID] if self.GOOGLE_DRIVE_FOLDER_ID else []
+    #     }
+    #     media = MediaFileUpload(file_path, resumable=True)
+    #     file = self.google_service.files().create(
+    #         body=file_metadata,
+    #         media_body=media,
+    #         fields='id'
+    #     ).execute()
+    #
+    #     return f"https://drive.google.com/file/d/{file.get('id')}"
 
     def extract_shareholders_from_file(self, file_path):
         # tiff/pdf to jpg
