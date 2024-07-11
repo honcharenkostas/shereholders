@@ -2,20 +2,13 @@ import os
 import os.path
 import time
 import json
-# import pickle
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-# from google_auth_oauthlib.flow import InstalledAppFlow
-# from google.auth.transport.requests import Request
-# from googleapiclient.discovery import build
-# from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
-# import pytesseract
 from PIL import Image
 import fitz  # PyMuPDF
 import google.generativeai as genai
-# import csv
 import pandas as pd
 
 
@@ -23,18 +16,13 @@ load_dotenv()
 
 
 class Bot:
-    GOOGLE_API_SCOPES = ['https://www.googleapis.com/auth/drive.file']
-    GOOGLE_API_CLIENT_SECRET_FILE = 'client_secret.json'
     DOWNLOAD_DIR = f"{os.path.abspath(os.getcwd())}/data"
-    GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
     driver = None
-    google_service = None
     ai_client = None
     csv = None
 
     def __init__(self):
-        # self.google_service = self.google_authenticate()
-
+        # init Gemini
         genai.configure(api_key=os.environ['GEMINI_API_KEY'])
         self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -45,6 +33,7 @@ class Bot:
         options.add_argument("--window-size=1440,900")
         options.add_argument("--lang=en")
 
+        # init browser
         os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
         options.add_experimental_option("prefs", {
             "download.default_directory": self.DOWNLOAD_DIR,
@@ -52,7 +41,6 @@ class Bot:
             "download.directory_upgrade": True,
             "safebrowsing.enabled": True
         })
-
         service = Service(executable_path="./chromedriver")
         self.driver = webdriver.Chrome(
             service=service,
@@ -60,16 +48,14 @@ class Bot:
         )
         self.driver.maximize_window()
 
-        # for file in self.get_downloded_files():
-        #     os.remove(f"{self.DOWNLOAD_DIR}/{file}")
-
+        # load csv
         self.csv = self.xls_to_list_of_dicts("main.xls")
 
     def run(self):
         row_number = -1
         for row in self.csv:
             row_number += 1
-            print("row_number", row_number)
+            print(f"processing row #{row_number + 1}")
             try:
                 company_name = row.get("Name")
                 register_number = row.get("HRB")
@@ -149,13 +135,10 @@ class Bot:
                 for file in self.get_downloded_files():
                     if not file.endswith(".tiff") and not file.endswith(".pdf"):
                         continue
-                    # google_drive_file_url = self.upload_file_to_google_drive(file)
-                    # print("google_drive_file_url", google_drive_file_url)
                     shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
 
                     # rewrite csv
                     new_row = self.csv[row_number].copy()
-                    # new_row["Document Link"] = google_drive_file_url
                     new_row["Document Link"] = f"file://{self.DOWNLOAD_DIR}/{file}"
                     i = 1
                     for s in shareholders:
@@ -165,8 +148,6 @@ class Bot:
                         new_row[f"Shareholder-{i} age"] = s["age"]
                         i += 1
                     self.update_xls_by_index("main.xls", row_number, new_row)
-
-                    # os.remove(f"{self.DOWNLOAD_DIR}/{file}")
             except Exception as e:
                 print(f"{e}")
 
@@ -177,38 +158,6 @@ class Bot:
     def get_downloded_files(self):
         all_entries = os.listdir(self.DOWNLOAD_DIR)
         return [entry for entry in all_entries if os.path.isfile(os.path.join(self.DOWNLOAD_DIR, entry))]
-
-    # def google_authenticate(self):
-    #     creds = None
-    #     if os.path.exists('token.pickle'):
-    #         with open('token.pickle', 'rb') as token:
-    #             creds = pickle.load(token)
-    #     if not creds or not creds.valid:
-    #         if creds and creds.expired and creds.refresh_token:
-    #             creds.refresh(Request())
-    #         else:
-    #             flow = InstalledAppFlow.from_client_secrets_file(self.GOOGLE_API_CLIENT_SECRET_FILE, self.GOOGLE_API_SCOPES)
-    #             creds = flow.run_local_server(port=0)
-    #         with open('token.pickle', 'wb') as token:
-    #             pickle.dump(creds, token)
-    #
-    #     service = build('drive', 'v3', credentials=creds)
-    #     return service
-
-    # def upload_file_to_google_drive(self, file_path):
-    #     file_path = f"{self.DOWNLOAD_DIR}/{file_path}"
-    #     file_metadata = {
-    #         'name': os.path.basename(file_path),
-    #         'parents': [self.GOOGLE_DRIVE_FOLDER_ID] if self.GOOGLE_DRIVE_FOLDER_ID else []
-    #     }
-    #     media = MediaFileUpload(file_path, resumable=True)
-    #     file = self.google_service.files().create(
-    #         body=file_metadata,
-    #         media_body=media,
-    #         fields='id'
-    #     ).execute()
-    #
-    #     return f"https://drive.google.com/file/d/{file.get('id')}"
 
     def extract_shareholders_from_file(self, file_path):
         # tiff/pdf to jpg
