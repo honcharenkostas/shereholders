@@ -64,7 +64,6 @@ class Bot:
 
                 self.driver.get("https://www.handelsregister.de/rp_web/normalesuche.xhtml")
                 time.sleep(3)
-                self.driver.save_screenshot("1.png")
 
                 self.driver.execute_script(f"document.getElementById('form:schlagwoerter').innerText = '{company_name}'")
                 self.driver.execute_script(f"document.getElementById('form:registerNummer').value = '{register_number}'")
@@ -83,8 +82,6 @@ class Bot:
                 time.sleep(5)
                 self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                 time.sleep(1)
-
-                self.driver.save_screenshot("2.png")
 
                 for phrase in ["Dokumente zur Registernummer", "Documents on register number"]:
                     try:
@@ -150,8 +147,6 @@ class Bot:
                     self.update_xls_by_index("main.xls", row_number, new_row)
             except Exception as e:
                 print(f"{e}")
-
-            self.driver.save_screenshot("3.png")
 
         self.driver.close()
 
