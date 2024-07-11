@@ -17,6 +17,7 @@ load_dotenv()
 
 class Bot:
     DOWNLOAD_DIR = f"{os.path.abspath(os.getcwd())}/data"
+    DOWNLOAD_DIR_TMP = f"{os.path.abspath(os.getcwd())}/data/tmp"
     driver = None
     ai_client = None
     csv = None
@@ -50,11 +51,18 @@ class Bot:
 
         # load csv
         self.csv = self.xls_to_list_of_dicts("main.xls")
+        for dir in [self.DOWNLOAD_DIR, self.DOWNLOAD_DIR_TMP]:
+            if not os.path.exists(dir):
+                os.makedirs(dir)
 
     def run(self):
         row_number = -1
         for row in self.csv:
             row_number += 1
+            if row.get("Processed") and row.get("Processed").strip() == "yes":
+                print(f"skipping row #{row_number + 1}")
+                continue
+
             print(f"processing row #{row_number + 1}")
             try:
                 company_name = row.get("Name")
@@ -128,15 +136,16 @@ class Bot:
             except Exception as e:
                 print(f"{e}")
 
+            new_row = self.csv[row_number].copy()
             try:
                 for file in self.get_downloded_files():
                     if not file.endswith(".tiff") and not file.endswith(".pdf"):
                         continue
-                    shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
 
-                    # rewrite csv
-                    new_row = self.csv[row_number].copy()
                     new_row["Document Link"] = f"file://{self.DOWNLOAD_DIR}/{file}"
+
+                    # enrich data
+                    shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
                     i = 1
                     for s in shareholders:
                         new_row[f"Shareholder-{i}"] = s["name"]
@@ -144,9 +153,14 @@ class Bot:
                         new_row[f"Shareholder-{i} DB"] = s["date_of_birth"]
                         new_row[f"Shareholder-{i} age"] = s["age"]
                         i += 1
-                    self.update_xls_by_index("main.xls", row_number, new_row)
+                processed = "yes"
             except Exception as e:
+                processed = "error"
                 print(f"{e}")
+
+            # rewrite csv
+            new_row["Processed"] = processed
+            self.update_xls_by_index("main.xls", row_number, new_row)
 
         self.driver.close()
 
