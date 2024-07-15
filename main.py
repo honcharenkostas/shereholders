@@ -10,34 +10,41 @@ from PIL import Image
 import fitz  # PyMuPDF
 import google.generativeai as genai
 import pandas as pd
+import shutil
+import traceback
 
 
 load_dotenv()
 
 
 class Bot:
+    TMP_DIR = f"{os.path.abspath(os.getcwd())}/tmp"
     DOWNLOAD_DIR = f"{os.path.abspath(os.getcwd())}/data"
-    DOWNLOAD_DIR_TMP = f"{os.path.abspath(os.getcwd())}/data/tmp"
     driver = None
     ai_client = None
     csv = None
 
     def __init__(self):
+        os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
+        os.makedirs(self.TMP_DIR, exist_ok=True)
+        for file_name in os.listdir(self.TMP_DIR):
+            file_path = os.path.join(self.TMP_DIR, file_name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+
         # init Gemini
         genai.configure(api_key=os.environ['GEMINI_API_KEY'])
         self.ai_client = genai.GenerativeModel('gemini-1.5-flash')
 
+        # init browser
         options = webdriver.ChromeOptions()
         options.add_argument('--start-maximized')
         options.add_argument('--no-sandbox')
         options.add_argument('--headless')
         options.add_argument("--window-size=1440,900")
         options.add_argument("--lang=en")
-
-        # init browser
-        os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
         options.add_experimental_option("prefs", {
-            "download.default_directory": self.DOWNLOAD_DIR,
+            "download.default_directory": self.TMP_DIR,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
             "safebrowsing.enabled": True
@@ -51,19 +58,16 @@ class Bot:
 
         # load csv
         self.csv = self.xls_to_list_of_dicts("main.xls")
-        for dir in [self.DOWNLOAD_DIR, self.DOWNLOAD_DIR_TMP]:
-            if not os.path.exists(dir):
-                os.makedirs(dir)
 
     def run(self):
         row_number = -1
         for row in self.csv:
             row_number += 1
             if row.get("Processed") and row.get("Processed").strip() == "yes":
-                print(f"skipping row #{row_number + 1}")
+                print(f"Skipping row #{row_number + 1}")
                 continue
 
-            print(f"processing row #{row_number + 1}")
+            print(f"Processing row #{row_number + 1} ...")
             try:
                 company_name = row.get("Name")
                 register_number = row.get("HRB")
@@ -134,18 +138,21 @@ class Bot:
                 self.driver.execute_script("document.querySelector(\"button[type=submit]\").click()")
                 time.sleep(10)
             except Exception as e:
-                print(f"{e}")
+                traceback.print_exc()
 
             new_row = self.csv[row_number].copy()
             try:
                 for file in self.get_downloded_files():
                     if not file.endswith(".tiff") and not file.endswith(".pdf"):
+                        os.remove(file)
                         continue
 
+                    shutil.copy(f"{self.TMP_DIR}/{file}", f"{self.DOWNLOAD_DIR}/{file}")
                     new_row["Document Link"] = f"file://{self.DOWNLOAD_DIR}/{file}"
 
                     # enrich data
-                    shareholders = self.extract_shareholders_from_file(f"{self.DOWNLOAD_DIR}/{file}")
+                    shareholders = self.extract_shareholders_from_file(f"{self.TMP_DIR}/{file}")
+                    os.remove(f"{self.TMP_DIR}/{file}")
                     i = 1
                     for s in shareholders:
                         new_row[f"Shareholder-{i}"] = s["name"]
@@ -156,7 +163,7 @@ class Bot:
                 processed = "yes"
             except Exception as e:
                 processed = "error"
-                print(f"{e}")
+                traceback.print_exc()
 
             # rewrite csv
             new_row["Processed"] = processed
@@ -165,8 +172,8 @@ class Bot:
         self.driver.close()
 
     def get_downloded_files(self):
-        all_entries = os.listdir(self.DOWNLOAD_DIR)
-        return [entry for entry in all_entries if os.path.isfile(os.path.join(self.DOWNLOAD_DIR, entry))]
+        all_entries = os.listdir(self.TMP_DIR)
+        return [entry for entry in all_entries if os.path.isfile(os.path.join(self.TMP_DIR, entry))]
 
     def extract_shareholders_from_file(self, file_path):
         # tiff/pdf to jpg
@@ -203,7 +210,7 @@ class Bot:
             response = self.ai_client.generate_content([sample_file, prompt_text])
             result = json.loads(response.text)
         except Exception as e:
-            print(f"{e}")
+            traceback.print_exc()
             result = []
 
         os.remove(merged_image_path)
